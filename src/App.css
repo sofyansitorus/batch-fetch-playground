@@ -109,6 +109,13 @@
   grid-column: 1 / -1;
 }
 
+.field-separator {
+  grid-column: 1 / -1;
+  height: 1px;
+  background: rgba(6, 74, 95, 0.16);
+  margin: 0.25rem 0;
+}
+
 .inline-toggle {
   display: inline-flex;
   align-items: center;

@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 import { useMemo, useRef, useState } from 'react'
 import batchFetch from '@sofyansitorus/batch-fetch'
 import './App.css'
@@ -9,12 +9,20 @@ type EndpointKey =
   | 'jsonPlaceholder'
   | 'fakestore'
 
+type CustomField = {
+  name: keyof Pick<FormState, 'query' | 'productId' | 'payload'>
+  label: string
+  initialValue: string
+  type: 'text' | 'number' | 'textarea'
+}
+
 type EndpointTemplate = {
   label: string
   makeUrl: (form: FormState) => string
   method: 'GET' | 'POST'
   supportsBody: boolean
   tip: string
+  customFields?: CustomField[]
 }
 
 type FormState = {
@@ -65,6 +73,14 @@ const endpointTemplates: Record<EndpointKey, EndpointTemplate> = {
     method: 'GET',
     supportsBody: false,
     tip: 'CORS-friendly search endpoint that reflects the query in the returned results.',
+    customFields: [
+      {
+        name: 'query',
+        label: 'Search Query',
+        initialValue: 'laptop',
+        type: 'text',
+      },
+    ],
   },
   dummyJsonPost: {
     label: 'DummyJSON Add Post',
@@ -72,6 +88,21 @@ const endpointTemplates: Record<EndpointKey, EndpointTemplate> = {
     method: 'POST',
     supportsBody: true,
     tip: 'CORS-friendly mock create endpoint that returns the submitted JSON with a generated id.',
+    customFields: [
+      {
+        name: 'payload',
+        label: 'JSON Body',
+        initialValue: JSON.stringify(
+          {
+            title: 'I am in love with someone.',
+            userId: 5,
+          },
+          null,
+          2,
+        ),
+        type: 'textarea',
+      },
+    ],
   },
   jsonPlaceholder: {
     label: 'JSONPlaceholder POST',
@@ -79,6 +110,21 @@ const endpointTemplates: Record<EndpointKey, EndpointTemplate> = {
     method: 'POST',
     supportsBody: true,
     tip: 'Popular fake REST endpoint for create operations.',
+    customFields: [
+      {
+        name: 'payload',
+        label: 'JSON Body',
+        initialValue: JSON.stringify(
+          {
+            source: 'batch-fetch-demo',
+            timestamp: new Date().toISOString(),
+          },
+          null,
+          2,
+        ),
+        type: 'textarea',
+      },
+    ],
   },
   fakestore: {
     label: 'Fake Store API Product',
@@ -87,10 +133,18 @@ const endpointTemplates: Record<EndpointKey, EndpointTemplate> = {
     method: 'GET',
     supportsBody: false,
     tip: 'Public product endpoint useful for GET demos.',
+    customFields: [
+      {
+        name: 'productId',
+        label: 'Product Id (1-20)',
+        initialValue: '1',
+        type: 'number',
+      },
+    ],
   },
 }
 
-const initialForm: FormState = {
+const createBaseForm = (): FormState => ({
   endpointKey: 'dummyJsonPost',
   query: 'batch-fetch-demo',
   productId: '1',
@@ -105,6 +159,22 @@ const initialForm: FormState = {
   duplicateCount: 3,
   useDispatchDelay: false,
   dispatchDelayMs: 1200,
+})
+
+const getTemplateFormPatch = (endpointKey: EndpointKey): Partial<FormState> => {
+  const template = endpointTemplates[endpointKey]
+  const patch: Partial<FormState> = {}
+
+  template.customFields?.forEach((field) => {
+    patch[field.name] = field.initialValue
+  })
+
+  return patch
+}
+
+const initialForm: FormState = {
+  ...createBaseForm(),
+  ...getTemplateFormPatch('dummyJsonPost'),
 }
 
 const initialSummary: RequestSummary = {
@@ -135,7 +205,18 @@ function App() {
     key: K,
     value: FormState[K],
   ) => {
-    setForm((prev) => ({ ...prev, [key]: value }))
+    setForm((prev) => {
+      if (key === 'endpointKey') {
+        const nextEndpointKey = value as EndpointKey
+        return {
+          ...prev,
+          endpointKey: nextEndpointKey,
+          ...getTemplateFormPatch(nextEndpointKey),
+        }
+      }
+
+      return { ...prev, [key]: value }
+    })
   }
 
   const updateRequest = (id: string, partial: Partial<RequestRecord>) => {
@@ -375,35 +456,43 @@ function App() {
             />
           </label>
 
-          <label>
-            Search Query (for DummyJSON GET)
-            <input
-              value={form.query}
-              onChange={(event) => updateForm('query', event.target.value)}
-            />
-          </label>
+          {activeTemplate.customFields?.length ? (
+            <>
+              <div className="field-separator" aria-hidden="true" />
+              {activeTemplate.customFields.map((field) => {
+                const commonProps = {
+                  value: form[field.name],
+                  onChange: (
+                    event:
+                      | ChangeEvent<HTMLInputElement>
+                      | ChangeEvent<HTMLTextAreaElement>,
+                  ) => updateForm(field.name, event.target.value),
+                }
 
-          <label>
-            Product Id (for Fake Store GET)
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={form.productId}
-              onChange={(event) => updateForm('productId', event.target.value)}
-            />
-          </label>
+                if (field.type === 'textarea') {
+                  return (
+                    <label key={field.name} className="full-width">
+                      {field.label}
+                      <textarea rows={8} {...commonProps} />
+                    </label>
+                  )
+                }
 
-          {activeTemplate.supportsBody && (
-            <label className="full-width">
-              JSON Body
-              <textarea
-                value={form.payload}
-                rows={8}
-                onChange={(event) => updateForm('payload', event.target.value)}
-              />
-            </label>
-          )}
+                return (
+                  <label key={field.name} className="full-width">
+                    {field.label}
+                    <input
+                      type={field.type}
+                      min={field.type === 'number' ? 1 : undefined}
+                      max={field.type === 'number' ? 20 : undefined}
+                      {...commonProps}
+                    />
+                  </label>
+                )
+              })}
+              <div className="field-separator" aria-hidden="true" />
+            </>
+          ) : null}
 
           <label>
             <span>Delay Before Dispatch</span>
