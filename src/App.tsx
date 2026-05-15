@@ -1,5 +1,5 @@
 import type { ChangeEvent, FormEvent } from 'react'
-import { act, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import batchFetch from '@sofyansitorus/batch-fetch'
 import './App.css'
 import type {
