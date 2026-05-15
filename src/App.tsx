@@ -15,7 +15,7 @@ const endpointTemplates: Record<EndpointKey, EndpointTemplate> = {
   dummyJsonSearch: {
     label: 'DummyJSON Product Search',
     makeUrl: ({ payload }) =>
-      `https://dummyjson.com/products/search?${new URLSearchParams({ query: payload?.query?.toString() ?? '' }).toString()}`,
+      `https://dummyjson.com/products/search?${new URLSearchParams({ q: payload?.query?.toString() ?? '' }).toString()}`,
     method: 'GET',
     tip: 'CORS-friendly search endpoint that reflects the query in the returned results.',
     initialPayload: {
