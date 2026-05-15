@@ -15,7 +15,7 @@ const endpointTemplates: Record<EndpointKey, EndpointTemplate> = {
   dummyJsonSearch: {
     label: 'DummyJSON Product Search',
     makeUrl: ({ payload }) =>
-      `https://dummyjson.com/products/search?${new URLSearchParams(payload).toString()}`,
+      `https://dummyjson.com/products/search?${new URLSearchParams({ query: payload?.query?.toString() ?? '' }).toString()}`,
     method: 'GET',
     tip: 'CORS-friendly search endpoint that reflects the query in the returned results.',
     initialPayload: {
@@ -45,7 +45,7 @@ const endpointTemplates: Record<EndpointKey, EndpointTemplate> = {
   fakestore: {
     label: 'Fake Store API Product',
     makeUrl: ({ payload }) =>
-      `https://fakestoreapi.com/products/${payload.productId ?? '1'}`,
+      `https://fakestoreapi.com/products/${payload?.productId?.toString() ?? '1'}`,
     method: 'GET',
     tip: 'Public product endpoint useful for GET demos.',
     initialPayload: {
@@ -69,10 +69,10 @@ const defaultFormStateData: FormStateData = {
   duplicateCount: 3,
   payload: endpointTemplates[defaultEndpointKey].initialPayload
     ? JSON.stringify(
-        endpointTemplates[defaultEndpointKey].initialPayload,
-        null,
-        2,
-      )
+      endpointTemplates[defaultEndpointKey].initialPayload,
+      null,
+      2,
+    )
     : '',
   useDispatchDelay: false,
   dispatchDelayMs: 1200,
@@ -151,10 +151,10 @@ function App() {
       'payload',
       endpointTemplates[newEndpointKey].initialPayload
         ? JSON.stringify(
-            endpointTemplates[newEndpointKey].initialPayload,
-            null,
-            2,
-          )
+          endpointTemplates[newEndpointKey].initialPayload,
+          null,
+          2,
+        )
         : '',
     )
   }
