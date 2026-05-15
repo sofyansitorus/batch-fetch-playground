@@ -184,7 +184,7 @@
 .stats-grid {
   margin: 1rem 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.55rem;
 }
 
@@ -303,6 +303,7 @@
 .empty-state {
   margin: 0;
   color: var(--text-soft);
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 920px) {
