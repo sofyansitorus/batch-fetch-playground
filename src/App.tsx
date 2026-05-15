@@ -78,6 +78,49 @@ const defaultFormStateData: FormStateData = {
   dispatchDelayMs: 1200,
 }
 
+const stripTrailingCommasFromJson = (input: string): string => {
+  let output = ''
+  let inString = false
+  let escaped = false
+
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i]
+
+    if (escaped) {
+      output += char
+      escaped = false
+      continue
+    }
+
+    if (char === '\\') {
+      output += char
+      escaped = true
+      continue
+    }
+
+    if (char === '"') {
+      inString = !inString
+      output += char
+      continue
+    }
+
+    if (!inString && char === ',') {
+      let cursor = i + 1
+      while (cursor < input.length && /\s/.test(input[cursor])) {
+        cursor += 1
+      }
+
+      if (input[cursor] === '}' || input[cursor] === ']') {
+        continue
+      }
+    }
+
+    output += char
+  }
+
+  return output
+}
+
 function App() {
   const [formStateData, setFormStateData] =
     useState<FormStateData>(defaultFormStateData)
@@ -224,10 +267,10 @@ function App() {
     let parsedPayload: Record<string, string>
 
     try {
-      parsedPayload = JSON.parse(formStateData.payload) as Record<
-        string,
-        string
-      >
+      const sanitizedPayload = stripTrailingCommasFromJson(
+        formStateData.payload,
+      )
+      parsedPayload = JSON.parse(sanitizedPayload) as Record<string, string>
     } catch {
       if ('POST' === activeTemplate.method) {
         setGlobalError('Request Body must be valid JSON.')
