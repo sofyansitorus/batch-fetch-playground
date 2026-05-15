@@ -30,6 +30,26 @@
   color: #d4ebf7;
 }
 
+.hero-link-row {
+  margin: 1rem 0 0;
+}
+
+.hero-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 235, 247, 0.35);
+  color: #f6fafc;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.hero-link:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
 .panel {
   background: rgba(255, 255, 255, 0.87);
   border: 1px solid rgba(10, 61, 84, 0.18);

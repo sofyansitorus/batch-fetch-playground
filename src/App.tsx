@@ -1,21 +1,77 @@
+import type { FormEvent } from 'react'
 import { useMemo, useRef, useState } from 'react'
 import batchFetch from '@sofyansitorus/batch-fetch'
 import './App.css'
 
-const endpointTemplates = {
-  postmanGet: {
-    label: 'Postman Echo GET',
-    makeUrl: ({ query }) => `https://postman-echo.com/get?${new URLSearchParams({ q: query }).toString()}`,
+type EndpointKey =
+  | 'dummyJsonSearch'
+  | 'dummyJsonPost'
+  | 'jsonPlaceholder'
+  | 'fakestore'
+
+type EndpointTemplate = {
+  label: string
+  makeUrl: (form: FormState) => string
+  method: 'GET' | 'POST'
+  supportsBody: boolean
+  tip: string
+}
+
+type FormState = {
+  endpointKey: EndpointKey
+  query: string
+  productId: string
+  payload: string
+  duplicateCount: number
+  useDispatchDelay: boolean
+  dispatchDelayMs: number
+}
+
+type RequestStatus = 'scheduled' | 'pending' | 'success' | 'canceled' | 'error'
+
+type RequestResponse = {
+  ok: boolean
+  status: number
+  statusText: string
+  payload: unknown
+}
+
+type RequestRecord = {
+  id: string
+  index: number
+  endpointLabel: string
+  url: string
+  method: string
+  optionsPreview: string
+  status: RequestStatus
+  response: RequestResponse | null
+  error: string | null
+}
+
+type RequestSummary = {
+  total: number
+  scheduled: number
+  pending: number
+  success: number
+  canceled: number
+  error: number
+}
+
+const endpointTemplates: Record<EndpointKey, EndpointTemplate> = {
+  dummyJsonSearch: {
+    label: 'DummyJSON Product Search',
+    makeUrl: ({ query }) =>
+      `https://dummyjson.com/products/search?${new URLSearchParams({ q: query }).toString()}`,
     method: 'GET',
     supportsBody: false,
-    tip: 'Echoes query params, headers, and URL in the JSON response.',
+    tip: 'CORS-friendly search endpoint that reflects the query in the returned results.',
   },
-  postmanPost: {
-    label: 'Postman Echo POST',
-    makeUrl: () => 'https://postman-echo.com/post',
+  dummyJsonPost: {
+    label: 'DummyJSON Add Post',
+    makeUrl: () => 'https://dummyjson.com/posts/add',
     method: 'POST',
     supportsBody: true,
-    tip: 'Echoes your JSON body, headers, and URL in the JSON response.',
+    tip: 'CORS-friendly mock create endpoint that returns the submitted JSON with a generated id.',
   },
   jsonPlaceholder: {
     label: 'JSONPlaceholder POST',
@@ -33,8 +89,8 @@ const endpointTemplates = {
   },
 }
 
-const initialForm = {
-  endpointKey: 'postmanPost',
+const initialForm: FormState = {
+  endpointKey: 'dummyJsonPost',
   query: 'batch-fetch-demo',
   productId: '1',
   payload: JSON.stringify(
@@ -50,39 +106,48 @@ const initialForm = {
   dispatchDelayMs: 1200,
 }
 
+const initialSummary: RequestSummary = {
+  total: 0,
+  scheduled: 0,
+  pending: 0,
+  success: 0,
+  canceled: 0,
+  error: 0,
+}
+
 function App() {
-  const [form, setForm] = useState(initialForm)
-  const [requests, setRequests] = useState([])
+  const [form, setForm] = useState<FormState>(initialForm)
+  const [requests, setRequests] = useState<RequestRecord[]>([])
   const [globalError, setGlobalError] = useState('')
-  const controllersRef = useRef(new Map())
+  const controllersRef = useRef<Map<string, AbortController>>(new Map())
   const requestSeqRef = useRef(0)
-  const timeoutRef = useRef(new Map())
+  const timeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   const activeTemplate = useMemo(
     () => endpointTemplates[form.endpointKey],
     [form.endpointKey],
   )
 
-  const updateForm = (key, value) => {
+  const updateForm = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
-  const updateRequest = (id, partial) => {
+  const updateRequest = (id: string, partial: Partial<RequestRecord>) => {
     setRequests((prev) =>
       prev.map((item) => (item.id === id ? { ...item, ...partial } : item)),
     )
   }
 
-  const readResponsePayload = async (response) => {
+  const readResponsePayload = async (response: Response): Promise<unknown> => {
     const contentType = response.headers.get('content-type') || ''
     if (contentType.includes('application/json')) {
-      return await response.json()
+      return response.json()
     }
 
-    return await response.text()
+    return response.text()
   }
 
-  const cancelRequest = (id) => {
+  const cancelRequest = (id: string) => {
     const timeoutId = timeoutRef.current.get(id)
     if (timeoutId) {
       clearTimeout(timeoutId)
@@ -101,7 +166,9 @@ function App() {
   }
 
   const clearFinished = () => {
-    setRequests((prev) => prev.filter((item) => item.status === 'pending'))
+    setRequests((prev) =>
+      prev.filter((item) => item.status === 'scheduled' || item.status === 'pending'),
+    )
   }
 
   const resetBatchState = () => {
@@ -118,15 +185,15 @@ function App() {
     setRequests([])
   }
 
-  const triggerBatch = (event) => {
+  const triggerBatch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setGlobalError('')
     resetBatchState()
 
-    let parsedBody = null
+    let parsedBody: unknown = null
     if (activeTemplate.supportsBody) {
       try {
-        parsedBody = JSON.parse(form.payload)
+        parsedBody = JSON.parse(form.payload) as unknown
       } catch {
         setGlobalError('Body must be valid JSON for this endpoint.')
         return
@@ -140,14 +207,14 @@ function App() {
     }
 
     const delayMs = Number(form.dispatchDelayMs)
-    const useDelay = Boolean(form.useDispatchDelay)
+    const useDelay = form.useDispatchDelay
     if (useDelay && (!Number.isInteger(delayMs) || delayMs < 100 || delayMs > 10000)) {
       setGlobalError('Dispatch delay must be an integer between 100 and 10000 ms.')
       return
     }
 
     const url = activeTemplate.makeUrl(form)
-    const baseOptions = {
+    const baseOptions: RequestInit & { headers: Record<string, string> } = {
       method: activeTemplate.method,
       headers: {
         Accept: 'application/json',
@@ -159,94 +226,102 @@ function App() {
       baseOptions.body = JSON.stringify(parsedBody)
     }
 
-    const queued = Array.from({ length: count }, (_, index) => ({
+    const queued: RequestRecord[] = Array.from({ length: count }, (_, index) => ({
       id: `request-${(requestSeqRef.current += 1)}`,
       index: index + 1,
       endpointLabel: activeTemplate.label,
       url,
-      method: baseOptions.method,
+      method: baseOptions.method ?? activeTemplate.method,
       optionsPreview: JSON.stringify(baseOptions, null, 2),
       status: useDelay ? 'scheduled' : 'pending',
       response: null,
       error: null,
     }))
 
-    setRequests((prev) => [...queued, ...prev])
+    setRequests(queued)
 
     queued.forEach((entity) => {
       const runRequest = async () => {
-      const controller = new AbortController()
-      controllersRef.current.set(entity.id, controller)
-      updateRequest(entity.id, {
-        status: 'pending',
-      })
+        const controller = new AbortController()
+        controllersRef.current.set(entity.id, controller)
+        updateRequest(entity.id, {
+          status: 'pending',
+        })
 
-      try {
-        const response = await batchFetch(url, {
-          ...baseOptions,
-          signal: controller.signal,
-        })
-        const payload = await readResponsePayload(response)
-        updateRequest(entity.id, {
-          status: 'success',
-          response: {
-            ok: response.ok,
-            status: response.status,
-            statusText: response.statusText,
-            payload,
-          },
-        })
-      } catch (error) {
-        const canceled = error?.name === 'AbortError'
-        updateRequest(entity.id, {
-          status: canceled ? 'canceled' : 'error',
-          error: canceled
-            ? 'Request canceled by user.'
-            : error?.message || 'Unknown request error.',
-        })
-      } finally {
-        controllersRef.current.delete(entity.id)
-      }
+        try {
+          const response = await batchFetch(url, {
+            ...baseOptions,
+            signal: controller.signal,
+          })
+          const payload = await readResponsePayload(response)
+          updateRequest(entity.id, {
+            status: 'success',
+            response: {
+              ok: response.ok,
+              status: response.status,
+              statusText: response.statusText,
+              payload,
+            },
+          })
+        } catch (error: unknown) {
+          const isAbortError =
+            error instanceof DOMException
+              ? error.name === 'AbortError'
+              : error instanceof Error && error.name === 'AbortError'
+
+          updateRequest(entity.id, {
+            status: isAbortError ? 'canceled' : 'error',
+            error: isAbortError
+              ? 'Request canceled by user.'
+              : error instanceof Error
+                ? error.message
+                : 'Unknown request error.',
+          })
+        } finally {
+          controllersRef.current.delete(entity.id)
+        }
       }
 
       if (useDelay) {
         const timeoutId = setTimeout(() => {
           timeoutRef.current.delete(entity.id)
-          runRequest()
+          void runRequest()
         }, delayMs)
         timeoutRef.current.set(entity.id, timeoutId)
       } else {
-        runRequest()
+        void runRequest()
       }
     })
   }
 
-  const summary = useMemo(() => {
-    return requests.reduce(
+  const summary = useMemo<RequestSummary>(() => {
+    return requests.reduce<RequestSummary>(
       (acc, item) => {
         acc.total += 1
         acc[item.status] += 1
         return acc
       },
-      {
-        total: 0,
-        scheduled: 0,
-        pending: 0,
-        success: 0,
-        canceled: 0,
-        error: 0,
-      },
+      { ...initialSummary },
     )
   }, [requests])
 
   return (
     <main className="app-shell">
       <header className="hero">
-        <p className="eyebrow">Single-Page Demo</p>
         <h1>Batch Fetch Playground</h1>
         <p className="subtitle">
           Trigger identical calls quickly and inspect how each caller resolves independently.
           Cancel any in-flight caller without affecting others.
+        </p>
+        <p className="hero-link-row">
+          <a
+            className="hero-link"
+            href="https://github.com/sofyansitorus/batch-fetch"
+            target="_blank"
+            rel="noreferrer"
+          >
+            View batch-fetch on GitHub
+          </a>
         </p>
       </header>
 
@@ -259,7 +334,9 @@ function App() {
             Endpoint
             <select
               value={form.endpointKey}
-              onChange={(event) => updateForm('endpointKey', event.target.value)}
+              onChange={(event) =>
+                updateForm('endpointKey', event.target.value as EndpointKey)
+              }
             >
               {Object.entries(endpointTemplates).map(([key, value]) => (
                 <option key={key} value={key}>
@@ -283,7 +360,7 @@ function App() {
           </label>
 
           <label>
-            Query Value (for Postman GET)
+            Search Query (for DummyJSON GET)
             <input
               value={form.query}
               onChange={(event) => updateForm('query', event.target.value)}
@@ -291,7 +368,7 @@ function App() {
           </label>
 
           <label>
-            Product Id (for Fake Store)
+            Product Id (for Fake Store GET)
             <input
               type="number"
               min={1}
@@ -435,7 +512,7 @@ function App() {
                 <button
                   type="button"
                   className="danger"
-                  disabled={item.status !== 'pending'}
+                  disabled={item.status !== 'pending' && item.status !== 'scheduled'}
                   onClick={() => cancelRequest(item.id)}
                 >
                   Cancel This Request
