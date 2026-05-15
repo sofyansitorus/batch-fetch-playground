@@ -69,10 +69,10 @@ const defaultFormStateData: FormStateData = {
   duplicateCount: 3,
   payload: endpointTemplates[defaultEndpointKey].initialPayload
     ? JSON.stringify(
-      endpointTemplates[defaultEndpointKey].initialPayload,
-      null,
-      2,
-    )
+        endpointTemplates[defaultEndpointKey].initialPayload,
+        null,
+        2,
+      )
     : '',
   useDispatchDelay: false,
   dispatchDelayMs: 1200,
@@ -151,10 +151,10 @@ function App() {
       'payload',
       endpointTemplates[newEndpointKey].initialPayload
         ? JSON.stringify(
-          endpointTemplates[newEndpointKey].initialPayload,
-          null,
-          2,
-        )
+            endpointTemplates[newEndpointKey].initialPayload,
+            null,
+            2,
+          )
         : '',
     )
   }
@@ -261,6 +261,13 @@ function App() {
 
     if (!formStateData.payload.trim()) {
       setGlobalError('Payload is required for this endpoint.')
+      if ('POST' === activeTemplate.method) {
+        setGlobalError('Request Body is required for this endpoint.')
+      } else {
+        setGlobalError(
+          'Request Query Parameters is required for this endpoint.',
+        )
+      }
       return
     }
 
@@ -273,7 +280,7 @@ function App() {
       parsedPayload = JSON.parse(sanitizedPayload) as Record<string, string>
     } catch {
       if ('POST' === activeTemplate.method) {
-        setGlobalError('Request Body must be valid JSON.')
+        setGlobalError('Request Body is required must be a valid JSON.')
       } else {
         setGlobalError('Request Query Parameters must be a valid JSON.')
       }
