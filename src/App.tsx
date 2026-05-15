@@ -229,7 +229,11 @@ function App() {
         string
       >
     } catch {
-      setGlobalError('Payload must be valid JSON.')
+      if ('POST' === activeTemplate.method) {
+        setGlobalError('Request Body must be valid JSON.')
+      } else {
+        setGlobalError('Request Query Parameters must be a valid JSON.')
+      }
       return
     }
 
