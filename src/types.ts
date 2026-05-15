@@ -4,31 +4,24 @@ export type EndpointKey =
   | 'jsonPlaceholder'
   | 'fakestore'
 
-export type CustomField = {
-  name: keyof Pick<FormState, 'query' | 'productId' | 'payload'>
-  label: string
-  initialValue: string
-  type: 'text' | 'number' | 'textarea'
-}
-
 export type EndpointTemplate = {
   label: string
-  makeUrl: (form: FormState) => string
+  makeUrl: (form: FormStateDataParsed) => string
+  makeBody?: (form: FormStateDataParsed) => string
   method: 'GET' | 'POST'
-  supportsBody: boolean
   tip: string
-  customFields?: CustomField[]
+  initialPayload: Record<string, string>
 }
 
-export type FormState = {
+export type FormStateData<TPayload = string> = {
   endpointKey: EndpointKey
-  query: string
-  productId: string
-  payload: string
   duplicateCount: number
+  payload: TPayload
   useDispatchDelay: boolean
   dispatchDelayMs: number
 }
+
+export type FormStateDataParsed = FormStateData<Record<string, string>>
 
 export type RequestStatus =
   | 'scheduled'

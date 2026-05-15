@@ -1,11 +1,12 @@
 import type { ChangeEvent, FormEvent } from 'react'
-import { useMemo, useRef, useState } from 'react'
+import { act, useMemo, useRef, useState } from 'react'
 import batchFetch from '@sofyansitorus/batch-fetch'
 import './App.css'
 import type {
   EndpointKey,
   EndpointTemplate,
-  FormState,
+  FormStateData,
+  FormStateDataParsed,
   RequestRecord,
   RequestSummary,
 } from './types'
@@ -13,113 +14,44 @@ import type {
 const endpointTemplates: Record<EndpointKey, EndpointTemplate> = {
   dummyJsonSearch: {
     label: 'DummyJSON Product Search',
-    makeUrl: ({ query }) =>
-      `https://dummyjson.com/products/search?${new URLSearchParams({ q: query }).toString()}`,
+    makeUrl: ({ payload }) =>
+      `https://dummyjson.com/products/search?${new URLSearchParams(payload).toString()}`,
     method: 'GET',
-    supportsBody: false,
     tip: 'CORS-friendly search endpoint that reflects the query in the returned results.',
-    customFields: [
-      {
-        name: 'query',
-        label: 'Search Query',
-        initialValue: 'laptop',
-        type: 'text',
-      },
-    ],
+    initialPayload: {
+      query: 'laptop',
+    },
   },
   dummyJsonPost: {
     label: 'DummyJSON Add Post',
     makeUrl: () => 'https://dummyjson.com/posts/add',
     method: 'POST',
-    supportsBody: true,
     tip: 'CORS-friendly mock create endpoint that returns the submitted JSON with a generated id.',
-    customFields: [
-      {
-        name: 'payload',
-        label: 'JSON Body',
-        initialValue: JSON.stringify(
-          {
-            title: 'I am in love with someone.',
-            userId: 5,
-          },
-          null,
-          2,
-        ),
-        type: 'textarea',
-      },
-    ],
+    initialPayload: {
+      title: 'I am in love with someone.',
+      userId: '5',
+    },
   },
   jsonPlaceholder: {
     label: 'JSONPlaceholder POST',
     makeUrl: () => 'https://jsonplaceholder.typicode.com/posts',
     method: 'POST',
-    supportsBody: true,
     tip: 'Popular fake REST endpoint for create operations.',
-    customFields: [
-      {
-        name: 'payload',
-        label: 'JSON Body',
-        initialValue: JSON.stringify(
-          {
-            source: 'batch-fetch-demo',
-            timestamp: new Date().toISOString(),
-          },
-          null,
-          2,
-        ),
-        type: 'textarea',
-      },
-    ],
-  },
-  fakestore: {
-    label: 'Fake Store API Product',
-    makeUrl: ({ productId }) =>
-      `https://fakestoreapi.com/products/${productId}`,
-    method: 'GET',
-    supportsBody: false,
-    tip: 'Public product endpoint useful for GET demos.',
-    customFields: [
-      {
-        name: 'productId',
-        label: 'Product Id (1-20)',
-        initialValue: '1',
-        type: 'number',
-      },
-    ],
-  },
-}
-
-const createBaseForm = (): FormState => ({
-  endpointKey: 'dummyJsonPost',
-  query: 'batch-fetch-demo',
-  productId: '1',
-  payload: JSON.stringify(
-    {
+    initialPayload: {
       source: 'batch-fetch-demo',
       timestamp: new Date().toISOString(),
     },
-    null,
-    2,
-  ),
-  duplicateCount: 3,
-  useDispatchDelay: false,
-  dispatchDelayMs: 1200,
-})
-
-const getTemplateFormPatch = (endpointKey: EndpointKey): Partial<FormState> => {
-  const template = endpointTemplates[endpointKey]
-  const patch: Partial<FormState> = {}
-
-  template.customFields?.forEach((field) => {
-    patch[field.name] = field.initialValue
-  })
-
-  return patch
-}
-
-const initialForm: FormState = {
-  ...createBaseForm(),
-  ...getTemplateFormPatch('dummyJsonPost'),
+  },
+  fakestore: {
+    label: 'Fake Store API Product',
+    makeUrl: ({ payload }) =>
+      `https://fakestoreapi.com/products/${payload.productId ?? '1'}`,
+    method: 'GET',
+    tip: 'Public product endpoint useful for GET demos.',
+    initialPayload: {
+      productId: '1',
+    },
+  },
 }
 
 const initialSummary: RequestSummary = {
@@ -131,8 +63,24 @@ const initialSummary: RequestSummary = {
   error: 0,
 }
 
+const defaultEndpointKey: EndpointKey = 'dummyJsonPost'
+const defaultFormStateData: FormStateData = {
+  endpointKey: defaultEndpointKey,
+  duplicateCount: 3,
+  payload: endpointTemplates[defaultEndpointKey].initialPayload
+    ? JSON.stringify(
+        endpointTemplates[defaultEndpointKey].initialPayload,
+        null,
+        2,
+      )
+    : '',
+  useDispatchDelay: false,
+  dispatchDelayMs: 1200,
+}
+
 function App() {
-  const [form, setForm] = useState<FormState>(initialForm)
+  const [formStateData, setFormStateData] =
+    useState<FormStateData>(defaultFormStateData)
   const [requests, setRequests] = useState<RequestRecord[]>([])
   const [globalError, setGlobalError] = useState('')
   const controllersRef = useRef<Map<string, AbortController>>(new Map())
@@ -142,26 +90,52 @@ function App() {
   )
 
   const activeTemplate = useMemo(
-    () => endpointTemplates[form.endpointKey],
-    [form.endpointKey],
+    () => endpointTemplates[formStateData.endpointKey],
+    [formStateData.endpointKey],
   )
 
-  const updateForm = <K extends keyof FormState>(
+  const updateFormStateData = <K extends keyof FormStateData>(
     key: K,
-    value: FormState[K],
+    value: FormStateData[K],
   ) => {
-    setForm((prev) => {
-      if (key === 'endpointKey') {
-        const nextEndpointKey = value as EndpointKey
-        return {
-          ...prev,
-          endpointKey: nextEndpointKey,
-          ...getTemplateFormPatch(nextEndpointKey),
-        }
-      }
+    setFormStateData((prev) => ({ ...prev, [key]: value }))
+  }
 
-      return { ...prev, [key]: value }
-    })
+  const updateEndpointKey = (event: ChangeEvent<HTMLSelectElement>) => {
+    const newEndpointKey = event.target.value as EndpointKey
+    updateFormStateData('endpointKey', newEndpointKey)
+    updateFormStateData(
+      'payload',
+      endpointTemplates[newEndpointKey].initialPayload
+        ? JSON.stringify(
+            endpointTemplates[newEndpointKey].initialPayload,
+            null,
+            2,
+          )
+        : '',
+    )
+  }
+
+  const updateDuplicateCount = (event: ChangeEvent<HTMLInputElement>) => {
+    updateFormStateData(
+      'duplicateCount',
+      Number(event.target.value || defaultFormStateData.duplicateCount),
+    )
+  }
+
+  const updatePayload = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    updateFormStateData('payload', event.target.value)
+  }
+
+  const updateUseDispatchDelay = (event: ChangeEvent<HTMLInputElement>) => {
+    updateFormStateData('useDispatchDelay', event.target.checked)
+  }
+
+  const updateFormDispatchDelayMs = (event: ChangeEvent<HTMLInputElement>) => {
+    updateFormStateData(
+      'dispatchDelayMs',
+      Number(event.target.value || defaultFormStateData.dispatchDelayMs),
+    )
   }
 
   const updateRequest = (id: string, partial: Partial<RequestRecord>) => {
@@ -224,24 +198,14 @@ function App() {
     setGlobalError('')
     resetBatchState()
 
-    let parsedBody: unknown = null
-    if (activeTemplate.supportsBody) {
-      try {
-        parsedBody = JSON.parse(form.payload) as unknown
-      } catch {
-        setGlobalError('Body must be valid JSON for this endpoint.')
-        return
-      }
-    }
-
-    const count = Number(form.duplicateCount)
+    const count = Number(formStateData.duplicateCount)
     if (!Number.isInteger(count) || count < 1 || count > 8) {
       setGlobalError('Duplicate requests must be an integer between 1 and 8.')
       return
     }
 
-    const delayMs = Number(form.dispatchDelayMs)
-    const useDelay = form.useDispatchDelay
+    const delayMs = Number(formStateData.dispatchDelayMs)
+    const useDelay = formStateData.useDispatchDelay
     if (
       useDelay &&
       (!Number.isInteger(delayMs) || delayMs < 100 || delayMs > 10000)
@@ -252,7 +216,39 @@ function App() {
       return
     }
 
-    const url = activeTemplate.makeUrl(form)
+    if (!formStateData.payload.trim()) {
+      setGlobalError('Payload is required for this endpoint.')
+      return
+    }
+
+    let parsedPayload: Record<string, string>
+
+    try {
+      parsedPayload = JSON.parse(formStateData.payload) as Record<
+        string,
+        string
+      >
+    } catch {
+      setGlobalError('Payload must be valid JSON.')
+      return
+    }
+
+    const formStateDataParsed: FormStateDataParsed = {
+      ...formStateData,
+      payload: parsedPayload,
+    }
+
+    let url: string
+
+    try {
+      url = activeTemplate.makeUrl(formStateDataParsed)
+    } catch {
+      setGlobalError(
+        'Failed to construct request URL. Check your payload format.',
+      )
+      return
+    }
+
     const baseOptions: RequestInit & { headers: Record<string, string> } = {
       method: activeTemplate.method,
       headers: {
@@ -260,9 +256,19 @@ function App() {
       },
     }
 
-    if (activeTemplate.supportsBody) {
+    if ('POST' === activeTemplate.method) {
       baseOptions.headers['Content-Type'] = 'application/json'
-      baseOptions.body = JSON.stringify(parsedBody)
+
+      if (activeTemplate.makeBody) {
+        baseOptions.body = activeTemplate.makeBody(formStateDataParsed)
+      } else {
+        try {
+          baseOptions.body = JSON.stringify(parsedPayload)
+        } catch {
+          setGlobalError('Body must be valid JSON for this endpoint.')
+          return
+        }
+      }
     }
 
     const queued: RequestRecord[] = Array.from(
@@ -375,10 +381,9 @@ function App() {
           <label>
             Endpoint
             <select
-              value={form.endpointKey}
-              onChange={(event) =>
-                updateForm('endpointKey', event.target.value as EndpointKey)
-              }
+              name="endpointKey"
+              value={formStateData.endpointKey}
+              onChange={updateEndpointKey}
             >
               {Object.entries(endpointTemplates).map(([key, value]) => (
                 <option key={key} value={key}>
@@ -391,63 +396,37 @@ function App() {
           <label>
             Duplicate Requests
             <input
+              name="duplicateCount"
               type="number"
               min={1}
               max={8}
-              value={form.duplicateCount}
-              onChange={(event) =>
-                updateForm('duplicateCount', Number(event.target.value || 1))
-              }
+              value={formStateData.duplicateCount.toString()}
+              onChange={updateDuplicateCount}
             />
           </label>
 
-          {activeTemplate.customFields?.length ? (
-            <>
-              <div className="field-separator" aria-hidden="true" />
-              {activeTemplate.customFields.map((field) => {
-                const commonProps = {
-                  value: form[field.name],
-                  onChange: (
-                    event:
-                      | ChangeEvent<HTMLInputElement>
-                      | ChangeEvent<HTMLTextAreaElement>,
-                  ) => updateForm(field.name, event.target.value),
-                }
-
-                if (field.type === 'textarea') {
-                  return (
-                    <label key={field.name} className="full-width">
-                      {field.label}
-                      <textarea rows={8} {...commonProps} />
-                    </label>
-                  )
-                }
-
-                return (
-                  <label key={field.name} className="full-width">
-                    {field.label}
-                    <input
-                      type={field.type}
-                      min={field.type === 'number' ? 1 : undefined}
-                      max={field.type === 'number' ? 20 : undefined}
-                      {...commonProps}
-                    />
-                  </label>
-                )
-              })}
-              <div className="field-separator" aria-hidden="true" />
-            </>
-          ) : null}
+          <div className="field-separator" aria-hidden="true" />
+          <label className="full-width">
+            {'GET' === activeTemplate.method
+              ? 'Request Query Parameters'
+              : 'Request Body'}
+            <textarea
+              name="payload"
+              rows={8}
+              onChange={updatePayload}
+              value={formStateData.payload}
+            />
+          </label>
+          <div className="field-separator" aria-hidden="true" />
 
           <label>
             <span>Delay Before Dispatch</span>
             <div className="inline-toggle">
               <input
+                name="useDispatchDelay"
                 type="checkbox"
-                checked={form.useDispatchDelay}
-                onChange={(event) =>
-                  updateForm('useDispatchDelay', event.target.checked)
-                }
+                checked={formStateData.useDispatchDelay}
+                onChange={updateUseDispatchDelay}
               />
               <span>Enable delay</span>
             </div>
@@ -456,19 +435,18 @@ function App() {
           <label>
             Delay (ms)
             <input
+              name="dispatchDelayMs"
               type="number"
               min={100}
               max={10000}
               step={100}
-              disabled={!form.useDispatchDelay}
-              value={form.dispatchDelayMs}
-              onChange={(event) =>
-                updateForm('dispatchDelayMs', Number(event.target.value || 0))
-              }
+              disabled={!formStateData.useDispatchDelay}
+              value={formStateData.dispatchDelayMs}
+              onChange={updateFormDispatchDelayMs}
             />
           </label>
 
-          {form.useDispatchDelay && (
+          {formStateData.useDispatchDelay && (
             <p className="hint-banner full-width">
               Hint: Delay is useful to demonstrate canceling certain request
               items before they are dispatched to the network.
