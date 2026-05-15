@@ -82,7 +82,8 @@ const endpointTemplates: Record<EndpointKey, EndpointTemplate> = {
   },
   fakestore: {
     label: 'Fake Store API Product',
-    makeUrl: ({ productId }) => `https://fakestoreapi.com/products/${productId}`,
+    makeUrl: ({ productId }) =>
+      `https://fakestoreapi.com/products/${productId}`,
     method: 'GET',
     supportsBody: false,
     tip: 'Public product endpoint useful for GET demos.',
@@ -121,14 +122,19 @@ function App() {
   const [globalError, setGlobalError] = useState('')
   const controllersRef = useRef<Map<string, AbortController>>(new Map())
   const requestSeqRef = useRef(0)
-  const timeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const timeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  )
 
   const activeTemplate = useMemo(
     () => endpointTemplates[form.endpointKey],
     [form.endpointKey],
   )
 
-  const updateForm = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+  const updateForm = <K extends keyof FormState>(
+    key: K,
+    value: FormState[K],
+  ) => {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
@@ -167,7 +173,9 @@ function App() {
 
   const clearFinished = () => {
     setRequests((prev) =>
-      prev.filter((item) => item.status === 'scheduled' || item.status === 'pending'),
+      prev.filter(
+        (item) => item.status === 'scheduled' || item.status === 'pending',
+      ),
     )
   }
 
@@ -208,8 +216,13 @@ function App() {
 
     const delayMs = Number(form.dispatchDelayMs)
     const useDelay = form.useDispatchDelay
-    if (useDelay && (!Number.isInteger(delayMs) || delayMs < 100 || delayMs > 10000)) {
-      setGlobalError('Dispatch delay must be an integer between 100 and 10000 ms.')
+    if (
+      useDelay &&
+      (!Number.isInteger(delayMs) || delayMs < 100 || delayMs > 10000)
+    ) {
+      setGlobalError(
+        'Dispatch delay must be an integer between 100 and 10000 ms.',
+      )
       return
     }
 
@@ -226,17 +239,20 @@ function App() {
       baseOptions.body = JSON.stringify(parsedBody)
     }
 
-    const queued: RequestRecord[] = Array.from({ length: count }, (_, index) => ({
-      id: `request-${(requestSeqRef.current += 1)}`,
-      index: index + 1,
-      endpointLabel: activeTemplate.label,
-      url,
-      method: baseOptions.method ?? activeTemplate.method,
-      optionsPreview: JSON.stringify(baseOptions, null, 2),
-      status: useDelay ? 'scheduled' : 'pending',
-      response: null,
-      error: null,
-    }))
+    const queued: RequestRecord[] = Array.from(
+      { length: count },
+      (_, index) => ({
+        id: `request-${(requestSeqRef.current += 1)}`,
+        index: index + 1,
+        endpointLabel: activeTemplate.label,
+        url,
+        method: baseOptions.method ?? activeTemplate.method,
+        optionsPreview: JSON.stringify(baseOptions, null, 2),
+        status: useDelay ? 'scheduled' : 'pending',
+        response: null,
+        error: null,
+      }),
+    )
 
     setRequests(queued)
 
@@ -310,8 +326,8 @@ function App() {
       <header className="hero">
         <h1>Batch Fetch Playground</h1>
         <p className="subtitle">
-          Trigger identical calls quickly and inspect how each caller resolves independently.
-          Cancel any in-flight caller without affecting others.
+          Trigger identical calls quickly and inspect how each caller resolves
+          independently. Cancel any in-flight caller without affecting others.
         </p>
         <p className="hero-link-row">
           <a
@@ -395,7 +411,9 @@ function App() {
               <input
                 type="checkbox"
                 checked={form.useDispatchDelay}
-                onChange={(event) => updateForm('useDispatchDelay', event.target.checked)}
+                onChange={(event) =>
+                  updateForm('useDispatchDelay', event.target.checked)
+                }
               />
               <span>Enable delay</span>
             </div>
@@ -418,8 +436,8 @@ function App() {
 
           {form.useDispatchDelay && (
             <p className="hint-banner full-width">
-              Hint: Delay is useful to demonstrate canceling certain request items before
-              they are dispatched to the network.
+              Hint: Delay is useful to demonstrate canceling certain request
+              items before they are dispatched to the network.
             </p>
           )}
 
@@ -478,7 +496,9 @@ function App() {
                 <h3>
                   #{item.index} {item.endpointLabel}
                 </h3>
-                <span className={`status-pill ${item.status}`}>{item.status}</span>
+                <span className={`status-pill ${item.status}`}>
+                  {item.status}
+                </span>
               </header>
 
               <p className="meta-line">
@@ -512,7 +532,9 @@ function App() {
                 <button
                   type="button"
                   className="danger"
-                  disabled={item.status !== 'pending' && item.status !== 'scheduled'}
+                  disabled={
+                    item.status !== 'pending' && item.status !== 'scheduled'
+                  }
                   onClick={() => cancelRequest(item.id)}
                 >
                   Cancel This Request
