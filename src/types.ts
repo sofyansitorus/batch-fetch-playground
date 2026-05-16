@@ -26,6 +26,15 @@ export type RequestResponse = {
   payload: unknown
 }
 
+export type NetworkStats = {
+  startTime: number
+  endTime: number | null
+  durationMs: number | null
+  requestBodySize: number
+  responseSize: number | null
+  bandwidthMbps: number | null
+}
+
 export type RequestRecord = {
   id: string
   index: number
@@ -36,6 +45,7 @@ export type RequestRecord = {
   status: RequestStatus
   response: RequestResponse | null
   error: string | null
+  networkStats: NetworkStats
 }
 
 export type RequestSummary = {

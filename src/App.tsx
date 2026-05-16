@@ -304,6 +304,18 @@ function App() {
         status: 'pending',
         response: null,
         error: null,
+        networkStats: {
+          startTime: performance.now(),
+          endTime: null,
+          durationMs: null,
+          requestBodySize: baseOptions.body
+            ? typeof baseOptions.body === 'string'
+              ? new Blob([baseOptions.body]).size
+              : 0
+            : 0,
+          responseSize: null,
+          bandwidthMbps: null,
+        },
       }),
     )
 
@@ -323,6 +335,15 @@ function App() {
             signal: controller.signal,
           })
           const payload = await readResponsePayload(response)
+          const endTime = performance.now()
+          const contentLength = response.headers.get('content-length')
+          const responseSize = contentLength ? parseInt(contentLength, 10) : 0
+          const durationMs = endTime - entity.networkStats.startTime
+          const bandwidthMbps =
+            durationMs > 0
+              ? (responseSize / (1024 * 1024)) / (durationMs / 1000)
+              : 0
+
           updateRequest(entity.id, {
             status: 'success',
             response: {
@@ -331,12 +352,22 @@ function App() {
               statusText: response.statusText,
               payload,
             },
+            networkStats: {
+              ...entity.networkStats,
+              endTime,
+              durationMs,
+              responseSize,
+              bandwidthMbps,
+            },
           })
         } catch (error: unknown) {
           const isAbortError =
             error instanceof DOMException
               ? error.name === 'AbortError'
               : error instanceof Error && error.name === 'AbortError'
+
+          const endTime = performance.now()
+          const durationMs = endTime - entity.networkStats.startTime
 
           updateRequest(entity.id, {
             status: isAbortError ? 'canceled' : 'error',
@@ -345,6 +376,11 @@ function App() {
               : error instanceof Error
                 ? error.message
                 : 'Unknown request error.',
+            networkStats: {
+              ...entity.networkStats,
+              endTime,
+              durationMs,
+            },
           })
         } finally {
           controllersRef.current.delete(entity.id)
@@ -500,6 +536,41 @@ function App() {
               <details>
                 <summary>Request Options</summary>
                 <pre>{item.optionsPreview}</pre>
+              </details>
+
+              <details>
+                <summary>
+                  Network Stats
+                  {item.networkStats.durationMs !== null && (
+                    <span>
+                      {' '}
+                      ({item.networkStats.durationMs.toFixed(2)}ms)
+                    </span>
+                  )}
+                </summary>
+                <div style={{ padding: '10px', fontSize: '14px' }}>
+                  <p>
+                    <strong>Duration:</strong>{' '}
+                    {item.networkStats.durationMs !== null
+                      ? `${item.networkStats.durationMs.toFixed(2)}ms`
+                      : 'In progress...'}
+                  </p>
+                  <p>
+                    <strong>Request Body Size:</strong> {(item.networkStats.requestBodySize / 1024).toFixed(2)} KB
+                  </p>
+                  <p>
+                    <strong>Response Size:</strong>{' '}
+                    {item.networkStats.responseSize !== null
+                      ? `${(item.networkStats.responseSize / 1024).toFixed(2)} KB`
+                      : 'N/A'}
+                  </p>
+                  <p>
+                    <strong>Bandwidth:</strong>{' '}
+                    {item.networkStats.bandwidthMbps !== null
+                      ? `${item.networkStats.bandwidthMbps.toFixed(3)} MB/s`
+                      : 'N/A'}
+                  </p>
+                </div>
               </details>
 
               {item.response && (
