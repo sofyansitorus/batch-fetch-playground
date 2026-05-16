@@ -1,6 +1,7 @@
 import type { ChangeEvent, FormEvent } from 'react'
 import { useMemo, useRef, useState } from 'react'
 import batchFetch from '@sofyansitorus/batch-fetch'
+import { faker } from '@faker-js/faker'
 import './App.css'
 import type {
   EndpointKey,
@@ -11,71 +12,70 @@ import type {
   RequestSummary,
 } from './types'
 
+const stringifyPayload = (payload: unknown): string => {
+  try {
+    return JSON.stringify(payload, null, 2)
+  } catch {
+    return ''
+  }
+}
+
+const processPayload = (
+  payload: Record<string, string> | (() => string),
+): string => {
+  if ('function' === typeof payload) {
+    return payload()
+  }
+
+  if ('object' === typeof payload) {
+    return stringifyPayload(payload)
+  }
+
+  return ''
+}
+
 const endpointTemplates: Record<EndpointKey, EndpointTemplate> = {
-  dummyJsonSearch: {
-    label: 'DummyJSON Product Search',
-    makeUrl: ({ payload }) =>
-      `https://dummyjson.com/products/search?${new URLSearchParams({ q: payload?.query?.toString() ?? '' }).toString()}`,
-    method: 'GET',
-    tip: 'CORS-friendly search endpoint that reflects the query in the returned results.',
-    initialPayload: {
-      query: 'laptop',
-    },
-  },
-  dummyJsonPost: {
-    label: 'DummyJSON Add Post',
-    makeUrl: () => 'https://dummyjson.com/posts/add',
+  fastResponse: {
+    label: 'Fast Response',
+    makeUrl: () =>
+      'https://api.mockfly.dev/mocks/e1614434-8d9a-4e34-a6e9-d0d195b62912/fast',
     method: 'POST',
-    tip: 'CORS-friendly mock create endpoint that returns the submitted JSON with a generated id.',
-    initialPayload: {
-      title: 'I am in love with someone.',
-      userId: '5',
-    },
+    tip: 'Fast response is useful to demonstrate how batch-fetch handles multiple identical calls and resolves each independently.',
+    initialPayload: () =>
+      stringifyPayload({
+        timestamp: new Date().toISOString(),
+        email: faker.internet.email(),
+        fullName: faker.person.fullName(),
+      }),
   },
-  jsonPlaceholder: {
-    label: 'JSONPlaceholder POST',
-    makeUrl: () => 'https://jsonplaceholder.typicode.com/posts',
+  delayedResponse: {
+    label: 'Delayed Response (5s)',
+    makeUrl: () =>
+      'https://api.mockfly.dev/mocks/e1614434-8d9a-4e34-a6e9-d0d195b62912/delayed',
     method: 'POST',
-    tip: 'Popular fake REST endpoint for create operations.',
-    initialPayload: {
-      source: 'batch-fetch-demo',
-      timestamp: new Date().toISOString(),
-    },
-  },
-  fakestore: {
-    label: 'Fake Store API Product',
-    makeUrl: ({ payload }) =>
-      `https://fakestoreapi.com/products/${payload?.productId?.toString() ?? '1'}`,
-    method: 'GET',
-    tip: 'Public product endpoint useful for GET demos.',
-    initialPayload: {
-      productId: '1',
-    },
+    tip: 'Delayed response will have a 5-second delay. It is useful to demonstrate canceling certain request items without interrupting others.',
+    initialPayload: () =>
+      stringifyPayload({
+        timestamp: new Date().toISOString(),
+        email: faker.internet.email(),
+        fullName: faker.person.fullName(),
+      }),
   },
 }
 
 const initialSummary: RequestSummary = {
   total: 0,
-  scheduled: 0,
   pending: 0,
   success: 0,
   canceled: 0,
   error: 0,
 }
 
-const defaultEndpointKey: EndpointKey = 'dummyJsonPost'
+const defaultEndpointKey: EndpointKey = 'fastResponse'
 const defaultFormStateData: FormStateData = {
   endpointKey: defaultEndpointKey,
   duplicateCount: 3,
-  payload: endpointTemplates[defaultEndpointKey].initialPayload
-    ? JSON.stringify(
-        endpointTemplates[defaultEndpointKey].initialPayload,
-        null,
-        2,
-      )
-    : '',
-  useDispatchDelay: false,
-  dispatchDelayMs: 1200,
+  payload: processPayload(endpointTemplates[defaultEndpointKey].initialPayload),
 }
 
 const stripTrailingCommasFromJson = (input: string): string => {
@@ -149,13 +149,7 @@ function App() {
     updateFormStateData('endpointKey', newEndpointKey)
     updateFormStateData(
       'payload',
-      endpointTemplates[newEndpointKey].initialPayload
-        ? JSON.stringify(
-            endpointTemplates[newEndpointKey].initialPayload,
-            null,
-            2,
-          )
-        : '',
+      processPayload(endpointTemplates[newEndpointKey].initialPayload),
     )
   }
 
@@ -168,17 +162,6 @@ function App() {
 
   const updatePayload = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     updateFormStateData('payload', event.target.value)
-  }
-
-  const updateUseDispatchDelay = (event: ChangeEvent<HTMLInputElement>) => {
-    updateFormStateData('useDispatchDelay', event.target.checked)
-  }
-
-  const updateFormDispatchDelayMs = (event: ChangeEvent<HTMLInputElement>) => {
-    updateFormStateData(
-      'dispatchDelayMs',
-      Number(event.target.value || defaultFormStateData.dispatchDelayMs),
-    )
   }
 
   const updateRequest = (id: string, partial: Partial<RequestRecord>) => {
@@ -215,11 +198,7 @@ function App() {
   }
 
   const clearFinished = () => {
-    setRequests((prev) =>
-      prev.filter(
-        (item) => item.status === 'scheduled' || item.status === 'pending',
-      ),
-    )
+    setRequests((prev) => prev.filter((item) => item.status === 'pending'))
   }
 
   const resetBatchState = () => {
@@ -244,18 +223,6 @@ function App() {
     const count = Number(formStateData.duplicateCount)
     if (!Number.isInteger(count) || count < 1 || count > 8) {
       setGlobalError('Duplicate requests must be an integer between 1 and 8.')
-      return
-    }
-
-    const delayMs = Number(formStateData.dispatchDelayMs)
-    const useDelay = formStateData.useDispatchDelay
-    if (
-      useDelay &&
-      (!Number.isInteger(delayMs) || delayMs < 100 || delayMs > 10000)
-    ) {
-      setGlobalError(
-        'Dispatch delay must be an integer between 100 and 10000 ms.',
-      )
       return
     }
 
@@ -333,8 +300,8 @@ function App() {
         endpointLabel: activeTemplate.label,
         url,
         method: baseOptions.method ?? activeTemplate.method,
-        optionsPreview: JSON.stringify(baseOptions, null, 2),
-        status: useDelay ? 'scheduled' : 'pending',
+        optionsPreview: stringifyPayload(baseOptions),
+        status: 'pending',
         response: null,
         error: null,
       }),
@@ -384,15 +351,7 @@ function App() {
         }
       }
 
-      if (useDelay) {
-        const timeoutId = setTimeout(() => {
-          timeoutRef.current.delete(entity.id)
-          void runRequest()
-        }, delayMs)
-        timeoutRef.current.set(entity.id, timeoutId)
-      } else {
-        void runRequest()
-      }
+      void runRequest()
     })
   }
 
@@ -473,40 +432,6 @@ function App() {
           </label>
           <div className="field-separator" aria-hidden="true" />
 
-          <label>
-            <span>Delay Before Dispatch</span>
-            <div className="inline-toggle">
-              <input
-                name="useDispatchDelay"
-                type="checkbox"
-                checked={formStateData.useDispatchDelay}
-                onChange={updateUseDispatchDelay}
-              />
-              <span>Enable delay</span>
-            </div>
-          </label>
-
-          <label>
-            Delay (ms)
-            <input
-              name="dispatchDelayMs"
-              type="number"
-              min={100}
-              max={10000}
-              step={100}
-              disabled={!formStateData.useDispatchDelay}
-              value={formStateData.dispatchDelayMs}
-              onChange={updateFormDispatchDelayMs}
-            />
-          </label>
-
-          {formStateData.useDispatchDelay && (
-            <p className="hint-banner full-width">
-              Hint: Delay is useful to demonstrate canceling certain request
-              items before they are dispatched to the network.
-            </p>
-          )}
-
           {globalError && <p className="error-banner">{globalError}</p>}
 
           <div className="button-row">
@@ -526,10 +451,6 @@ function App() {
           <article>
             <strong>{summary.total}</strong>
             <span>Total</span>
-          </article>
-          <article>
-            <strong>{summary.scheduled}</strong>
-            <span>Scheduled</span>
           </article>
           <article>
             <strong>{summary.pending}</strong>
@@ -571,11 +492,9 @@ function App() {
                 {item.method} {item.url}
               </p>
               <p className="meta-line">
-                {item.status === 'scheduled'
-                  ? 'Scheduled: waiting for dispatch delay...'
-                  : item.status === 'pending'
-                    ? 'Dispatched: waiting for response...'
-                    : 'Finished'}
+                {item.status === 'pending'
+                  ? 'Dispatched: waiting for response...'
+                  : 'Finished'}
               </p>
 
               <details>
@@ -588,7 +507,7 @@ function App() {
                   <summary>
                     Response {item.response.status} {item.response.statusText}
                   </summary>
-                  <pre>{JSON.stringify(item.response.payload, null, 2)}</pre>
+                  <pre>{stringifyPayload(item.response.payload)}</pre>
                 </details>
               )}
 
@@ -598,9 +517,7 @@ function App() {
                 <button
                   type="button"
                   className="danger"
-                  disabled={
-                    item.status !== 'pending' && item.status !== 'scheduled'
-                  }
+                  disabled={item.status !== 'pending'}
                   onClick={() => cancelRequest(item.id)}
                 >
                   Cancel This Request

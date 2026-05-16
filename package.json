@@ -13,6 +13,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@faker-js/faker": "^10.4.0",
     "@sofyansitorus/batch-fetch": "^1.1.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"

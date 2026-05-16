@@ -1,8 +1,4 @@
-export type EndpointKey =
-  | 'dummyJsonSearch'
-  | 'dummyJsonPost'
-  | 'jsonPlaceholder'
-  | 'fakestore'
+export type EndpointKey = 'fastResponse' | 'delayedResponse'
 
 export type EndpointTemplate = {
   label: string
@@ -10,25 +6,18 @@ export type EndpointTemplate = {
   makeBody?: (form: FormStateDataParsed) => string
   method: 'GET' | 'POST'
   tip: string
-  initialPayload: Record<string, string>
+  initialPayload: Record<string, string> | (() => string)
 }
 
 export type FormStateData<TPayload = string> = {
   endpointKey: EndpointKey
   duplicateCount: number
   payload: TPayload
-  useDispatchDelay: boolean
-  dispatchDelayMs: number
 }
 
 export type FormStateDataParsed = FormStateData<Record<string, string>>
 
-export type RequestStatus =
-  | 'scheduled'
-  | 'pending'
-  | 'success'
-  | 'canceled'
-  | 'error'
+export type RequestStatus = 'pending' | 'success' | 'canceled' | 'error'
 
 export type RequestResponse = {
   ok: boolean
@@ -51,7 +40,6 @@ export type RequestRecord = {
 
 export type RequestSummary = {
   total: number
-  scheduled: number
   pending: number
   success: number
   canceled: number
